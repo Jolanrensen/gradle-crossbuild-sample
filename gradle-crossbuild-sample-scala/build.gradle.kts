@@ -1,9 +1,7 @@
 import com.igormaznitsa.jcp.gradle.JcpTask
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("java")
-    kotlin("jvm") version "1.7.0"
+    scala
     id("com.igormaznitsa.jcp")
     idea
 }
@@ -23,9 +21,9 @@ val scalaCompat = scala.substringBeforeLast('.')
 
 // Performs the preprocessing
 val preprocessMain by tasks.creating(JcpTask::class) {
-    sources.set(listOf(File("./src/main/kotlin")))
+    sources.set(listOf(File("./src/main/scala")))
     clearTarget.set(true)
-    fileExtensions.set(listOf("java", "kt"))
+    fileExtensions.set(listOf("java", "scala"))
     vars.set(
         mapOf(
             "spark" to spark,
@@ -37,13 +35,13 @@ val preprocessMain by tasks.creating(JcpTask::class) {
     outputs.upToDateWhen { false }
 }
 
-tasks.compileKotlin { dependsOn(preprocessMain) }
+tasks.compileScala { dependsOn(preprocessMain) }
 
 // Redirect the kotlin plugin to compile the preprocessed sources instead
-kotlin {
+scala {
     sourceSets {
         main {
-            kotlin.setSrcDirs(listOf(preprocessMain.target.get()))
+            scala.setSrcDirs(listOf(preprocessMain.target.get()))
         }
     }
 }
@@ -56,15 +54,6 @@ dependencies {
     // TODO - especially when creating as many variants as I have...
 }
 
-val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions {
-    jvmTarget = "1.8"
-}
-val compileTestKotlin: KotlinCompile by tasks
-compileTestKotlin.kotlinOptions {
-    jvmTarget = "1.8"
-}
-
 idea.module {
-    sourceDirs = mutableSetOf(File("./src/main/kotlin"))
+    sourceDirs = mutableSetOf(File("./src/main/scala"))
 }
