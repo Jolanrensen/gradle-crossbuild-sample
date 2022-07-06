@@ -1,10 +1,8 @@
 import com.igormaznitsa.jcp.gradle.JcpTask
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm") version "1.7.0"
     id("com.igormaznitsa.jcp")
-    idea
 }
 
 group = "nl.jolanrensen"
@@ -20,9 +18,11 @@ val scala = project.findProperty("scala") as? String? ?: "2.13.8"
 val sparkMinor = spark.substringBeforeLast('.')
 val scalaCompat = scala.substringBeforeLast('.')
 
+val kotlinMainSources = kotlin.sourceSets.main.get().kotlin.sourceDirectories
+
 // Performs the preprocessing
 val preprocessMain by tasks.creating(JcpTask::class) {
-    sources.set(listOf(File("./src/main/kotlin")))
+    sources.set(kotlinMainSources)
     clearTarget.set(true)
     fileExtensions.set(listOf("java", "kt"))
     vars.set(
@@ -33,17 +33,38 @@ val preprocessMain by tasks.creating(JcpTask::class) {
             "scalaCompat" to scalaCompat,
         )
     )
-    outputs.upToDateWhen { false }
+    outputs.upToDateWhen { target.get().exists() }
 }
 
-tasks.compileKotlin { dependsOn(preprocessMain) }
+// Temporarily redirect the kotlin plugin to compile the preprocessed sources instead
+tasks.compileKotlin {
+    dependsOn(preprocessMain)
+    outputs.upToDateWhen {
+        preprocessMain.outcomingFiles.files.isEmpty()
+    }
 
-// Redirect the kotlin plugin to compile the preprocessed sources instead
-kotlin {
-    sourceSets {
-        main {
-            kotlin.setSrcDirs(listOf(preprocessMain.target.get()))
+    doFirst {
+        kotlin {
+            sourceSets {
+                main {
+                    kotlin.setSrcDirs(listOf(preprocessMain.target.get()))
+                }
+            }
         }
+    }
+
+    doLast {
+        kotlin {
+            sourceSets {
+                main {
+                    kotlin.setSrcDirs(kotlinMainSources)
+                }
+            }
+        }
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
     }
 }
 
@@ -54,17 +75,4 @@ dependencies {
     // TODO - adding dependencies as above would probably also be cleaner than
     // TODO - crossBuild303_213Implementation("...") and all its variants
     // TODO - especially when creating as many variants as I have...
-}
-
-val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions {
-    jvmTarget = "1.8"
-}
-val compileTestKotlin: KotlinCompile by tasks
-compileTestKotlin.kotlinOptions {
-    jvmTarget = "1.8"
-}
-
-idea.module {
-    sourceDirs = mutableSetOf(File("./src/main/kotlin"))
 }

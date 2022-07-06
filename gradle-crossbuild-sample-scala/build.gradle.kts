@@ -3,7 +3,6 @@ import com.igormaznitsa.jcp.gradle.JcpTask
 plugins {
     scala
     id("com.igormaznitsa.jcp")
-    idea
 }
 
 group = "nl.jolanrensen"
@@ -19,9 +18,11 @@ val scala = project.findProperty("scala") as? String? ?: "2.13.8"
 val sparkMinor = spark.substringBeforeLast('.')
 val scalaCompat = scala.substringBeforeLast('.')
 
+val scalaMainSources = sourceSets.main.get().scala.sourceDirectories
+
 // Performs the preprocessing
 val preprocessMain by tasks.creating(JcpTask::class) {
-    sources.set(listOf(File("./src/main/scala")))
+    sources.set(scalaMainSources)
     clearTarget.set(true)
     fileExtensions.set(listOf("java", "scala"))
     vars.set(
@@ -32,16 +33,30 @@ val preprocessMain by tasks.creating(JcpTask::class) {
             "scalaCompat" to scalaCompat,
         )
     )
-    outputs.upToDateWhen { false }
+    outputs.upToDateWhen { target.get().exists() }
 }
 
-tasks.compileScala { dependsOn(preprocessMain) }
+// Temporarily redirect the scala plugin to compile the preprocessed sources instead
+tasks.compileScala {
+    dependsOn(preprocessMain)
+    outputs.upToDateWhen { preprocessMain.outcomingFiles.files.isEmpty() }
+    doFirst {
+        scala {
+            sourceSets {
+                main {
+                    scala.setSrcDirs(listOf(preprocessMain.target.get()))
+                }
+            }
+        }
+    }
 
-// Redirect the kotlin plugin to compile the preprocessed sources instead
-scala {
-    sourceSets {
-        main {
-            scala.setSrcDirs(listOf(preprocessMain.target.get()))
+    doLast {
+        scala {
+            sourceSets {
+                main {
+                    scala.setSrcDirs(scalaMainSources)
+                }
+            }
         }
     }
 }
@@ -52,8 +67,4 @@ dependencies {
     // TODO - adding dependencies as above would probably also be cleaner than
     // TODO - crossBuild303_213Implementation("...") and all its variants
     // TODO - especially when creating as many variants as I have...
-}
-
-idea.module {
-    sourceDirs = mutableSetOf(File("./src/main/scala"))
 }
