@@ -20,51 +20,39 @@ val scalaCompat = scala.substringBeforeLast('.')
 
 val scalaMainSources = sourceSets.main.get().scala.sourceDirectories
 
-// Performs the preprocessing
-val preprocessMain by tasks.creating(JcpTask::class) {
-    sources.set(scalaMainSources)
-    clearTarget.set(true)
-    fileExtensions.set(listOf("java", "scala"))
-    vars.set(
-        mapOf(
-            "spark" to spark,
-            "sparkMinor" to sparkMinor,
-            "scala" to scala,
-            "scalaCompat" to scalaCompat,
+sourceSets.asMap.filter { it.key.startsWith("crossBuild") }.forEach {
+
+    val sourceSet = it.value
+    val spark = sourceSet.ext.get("spark") as String
+    val sparkMinor = spark.substringBeforeLast('.')
+    val scala = sourceSet.ext.get("scalaCompilerVersion") as String
+    val scalaCompat = scala.substringBeforeLast('.')
+
+    // Performs the preprocessing
+    val task = tasks.create(it.key + "JcpTask", JcpTask::class) {
+        sources.set(scalaMainSources)
+        clearTarget.set(true)
+        fileExtensions.set(listOf("java", "scala"))
+        vars.set(
+            mapOf(
+                "spark" to spark,
+                "sparkMinor" to sparkMinor,
+                "scala" to scala,
+                "scalaCompat" to scalaCompat,
+            )
         )
+        outputs.upToDateWhen { target.get().exists() }
+    }
+
+    // Here we make tasks dependency so preprocessing will kick in at the right moment
+    (project.tasks.findByName(sourceSet.getCompileTaskName("scala")) as ScalaCompile).apply {
+        dependsOn(task)
+    }
+
+    // Here we add in a programmatic way dependencies per cross build.
+    // SourceSet ExtraProperties are leveraged again for that
+    project.dependencies.add(
+        sourceSet.implementationConfigurationName,
+        mapOf("group" to "org.apache.spark", "name" to "spark-sql_${scalaCompat}", "version" to spark)
     )
-    outputs.upToDateWhen { target.get().exists() }
-}
-
-// Temporarily redirect the scala plugin to compile the preprocessed sources instead
-tasks.compileScala {
-    dependsOn(preprocessMain)
-    outputs.upToDateWhen { preprocessMain.outcomingFiles.files.isEmpty() }
-    doFirst {
-        scala {
-            sourceSets {
-                main {
-                    scala.setSrcDirs(listOf(preprocessMain.target.get()))
-                }
-            }
-        }
-    }
-
-    doLast {
-        scala {
-            sourceSets {
-                main {
-                    scala.setSrcDirs(scalaMainSources)
-                }
-            }
-        }
-    }
-}
-
-dependencies {
-    implementation("org.apache.spark:spark-sql_$scalaCompat:$spark")
-
-    // TODO - adding dependencies as above would probably also be cleaner than
-    // TODO - crossBuild303_213Implementation("...") and all its variants
-    // TODO - especially when creating as many variants as I have...
 }
