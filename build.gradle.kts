@@ -8,16 +8,8 @@ buildscript {
 }
 
 plugins {
-    id("com.github.prokod.gradle-crossbuild") version "0.13.1"
+    id("com.github.prokod.gradle-crossbuild") version "0.14.1"
     idea
-}
-
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    implementation("org.scala-lang:scala-library:2.13.8")
 }
 
 subprojects {
@@ -36,13 +28,26 @@ subprojects {
             for (spark in sparkVersionsForBoth)
                 create(spark) {
                     scalaVersions = mutableSetOf("2.12", "2.13")
+                    archive.appendixPattern = "-${spark}_?"
+
+                    ext = mapOf(
+                        "spark" to spark
+                    )
                 }
 
             for (spark in sparkVersionsFor2_12)
                 create(spark) {
                     scalaVersions = mutableSetOf("2.12")
+                    archive.appendixPattern = "-${spark}_?"
+
+                    ext = mapOf(
+                        "spark" to spark
+                    )
                 }
         }
+    }
+    dependencies {
+        "implementation"("org.scala-lang:scala-library:2.13.8")
     }
 }
 
